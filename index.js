@@ -13,7 +13,7 @@ const connection = mysql.createConnection({
   port: 3306, //<-- optionnel si c'est le port par défaut (3306)
   user: "root",
   //password: "", //<--- ne pas mettre si vous n'avez pas de mot de passe
-  database: "angular",
+  database: "evaluation_angular",
 });
 
 // Connexion à la base de données
@@ -33,8 +33,8 @@ app.get("/", (requete, resultat) => {
   resultat.send("<h1>C'est une API il y a rien a voir ici</h1>");
 });
 
-app.get("/produits/liste", (requete, resultat) => {
-  connection.query("SELECT * FROM produit", (err, lignes) => {
+app.get("/model/liste", (requete, resultat) => {
+  connection.query("SELECT * FROM model", (err, lignes) => {
     //en cas d'erreur sql ou d'interuption de connexion avec la bdd
     if (err) {
       console.error(err);
@@ -45,19 +45,19 @@ app.get("/produits/liste", (requete, resultat) => {
   });
 });
 
-app.post("/produit", interceptor, (requete, resultat) => {
+app.post("/model", interceptor, (requete, resultat) => {
   const produit = requete.body;
 
-  if (requete.user.role != "vendeur" && 
-    requete.user.role != "administrateur") {
+  if (requete.user.role != "Cupidon" && 
+    requete.user.role != "Administrateur") {
       return resultat.sendStatus(403);
   }
 
   if (
-    produit.nom == null ||
-    produit.nom == "" ||
-    produit.nom.length > 20 ||
-    produit.description.length > 50
+    model.pseudo == null ||
+    model.pseudo == "" ||
+    model.pseudo.length > 20 ||
+    model.description.length > 50
   ) {
     //validation
     return resultat.sendStatus(400); //bad request
@@ -65,16 +65,16 @@ app.post("/produit", interceptor, (requete, resultat) => {
 
   //verification si le nom du produit existe déjà
   connection.query(
-    "SELECT * FROM produit WHERE nom = ?",
-    [produit.nom],
+    "SELECT * FROM model WHERE nom = ?",
+    [model.pseudo],
     (err, lignes) => {
       if (lignes.length > 0) {
         return resultat.sendStatus(409); //conflict
       }
 
       connection.query(
-        "INSERT INTO produit (nom, description, id_createur) VALUES (?, ?, ?)",
-        [produit.nom, produit.description, requete.user.id],
+        "INSERT INTO model (pseudo, date_naissance, taille_cm, poids_kg, mensurations, description) VALUES (?, ?, ?, ?, ?, ?)",
+        [model.nom, model.date_naissance, model.taille_cm, model.poids_kg, model.mensurations, model.description, requete.user.id],
         (err, lignes) => {
           if (err) {
             console.error(err);
@@ -88,10 +88,10 @@ app.post("/produit", interceptor, (requete, resultat) => {
   );
 });
 
-app.delete("/produit/:id", interceptor, (requete, resultat) => {
+app.delete("/model/:id", interceptor, (requete, resultat) => {
 
   //on recupere le produit
-  connection.query("SELECT * FROM produit WHERE id = ?", [requete.params.id], (erreur, lignes) => {
+  connection.query("SELECT * FROM model WHERE id = ?", [requete.params.id], (erreur, lignes) => {
 
     //si il y a eu une erreur
     if (erreur) {
@@ -105,15 +105,15 @@ app.delete("/produit/:id", interceptor, (requete, resultat) => {
     }
 
     //on vérifie si l'utilisateur connecté est le propriétaire
-    const estProprietaire = requete.user.role == "vendeur" && requete.user.id == lignes[0].id_createur
+    const estProprietaire = requete.user.role == "Cupidon" && requete.user.id == lignes[0].id_usager
 
     //si il n'est ni propriétaire du produit, ni administrateur
-    if (!estProprietaire && requete.user.role != "administrateur") {
+    if (!estProprietaire && requete.user.role != "Administrateur") {
       return resultat.sendStatus(403);
     }
 
     //on supprime le produit
-    connection.query("DELETE FROM produit WHERE id = ?", [requete.params.id], (erreur, lignes) => {
+    connection.query("DELETE FROM model WHERE id = ?", [requete.params.id], (erreur, lignes) => {
       //si il y a eu une erreur
       if (erreur) {
         console.error(err);
@@ -136,8 +136,8 @@ app.post("/inscription", (requete, resultat) => {
   const passwordHash = bcrypt.hashSync(utilisateur.password, 10);
 
   connection.query(
-    "INSERT INTO utilisateur(email, password) VALUES (? , ?)",
-    [utilisateur.email, passwordHash],
+    "INSERT INTO Usagers (nom, courriel, mot_de_passe, id_role) VALUES (? , ?, ?, 3)",
+    [utilisateur.nom, utilisateur.courriel, passwordHash],
     (err, retour) => {
       if (err && err.code == "ER_DUP_ENTRY") {
         return resultat.sendStatus(409); //conflict
@@ -156,11 +156,11 @@ app.post("/inscription", (requete, resultat) => {
 
 app.post("/connexion", (requete, resultat) => {
   connection.query(
-    `SELECT u.id, u.email, u.password, r.nom 
-      FROM utilisateur u 
-      JOIN role r ON u.role_id = r.id 
+    `SELECT u.id_usagers, u.courriel, u.mot_de_passe, r.nom_role 
+      FROM usagers u 
+      JOIN role r ON u.id_usager = r.id_role 
       WHERE email = ?`,
-    [requete.body.email],
+    [requete.body.courriel],
     (erreur, lignes) => {
       if (erreur) {
         console.error(erreur);
@@ -189,9 +189,9 @@ app.post("/connexion", (requete, resultat) => {
       return resultat.send(
         jwtUtils.sign(
           {
-            sub: requete.body.email,
-            role: lignes[0].nom,
-            id: lignes[0].id
+            sub: requete.body.courriel,
+            role: lignes[0].nom_role,
+            id: lignes[0].id_usager
           },
           "azerty123"
         )
