@@ -33,7 +33,7 @@ app.get("/", (requete, resultat) => {
   resultat.send("<h1>C'est une API il y a rien a voir ici</h1>");
 });
 
-app.get("/model/liste", (requete, resultat) => {
+app.get("/models/liste", (requete, resultat) => {
   connection.query("SELECT * FROM model", (err, lignes) => {
     //en cas d'erreur sql ou d'interuption de connexion avec la bdd
     if (err) {
@@ -46,7 +46,7 @@ app.get("/model/liste", (requete, resultat) => {
 });
 
 app.post("/model", interceptor, (requete, resultat) => {
-  const produit = requete.body;
+  const model = requete.body;
 
   if (requete.user.role != "Cupidon" && 
     requete.user.role != "Administrateur") {
@@ -63,9 +63,8 @@ app.post("/model", interceptor, (requete, resultat) => {
     return resultat.sendStatus(400); //bad request
   }
 
-  //verification si le nom du produit existe déjà
   connection.query(
-    "SELECT * FROM model WHERE nom = ?",
+    "SELECT * FROM model WHERE pseudo = ?",
     [model.pseudo],
     (err, lignes) => {
       if (lignes.length > 0) {
@@ -74,14 +73,14 @@ app.post("/model", interceptor, (requete, resultat) => {
 
       connection.query(
         "INSERT INTO model (pseudo, date_naissance, taille_cm, poids_kg, mensurations, description) VALUES (?, ?, ?, ?, ?, ?)",
-        [model.nom, model.date_naissance, model.taille_cm, model.poids_kg, model.mensurations, model.description, requete.user.id],
+        [model.pseudo, model.date_naissance, model.taille_cm, model.poids_kg, model.mensurations, model.description, requete.user.id],
         (err, lignes) => {
           if (err) {
             console.error(err);
             return resultat.sendStatus(500); //internal server error
           }
 
-          resultat.status(201).json(produit); //created
+          resultat.status(201).json(model);
         }
       );
     }
@@ -90,31 +89,25 @@ app.post("/model", interceptor, (requete, resultat) => {
 
 app.delete("/model/:id", interceptor, (requete, resultat) => {
 
-  //on recupere le produit
   connection.query("SELECT * FROM model WHERE id = ?", [requete.params.id], (erreur, lignes) => {
 
-    //si il y a eu une erreur
     if (erreur) {
       console.error(err);
-      return resultat.sendStatus(500); //internal server error
+      return resultat.sendStatus(500);
     }
 
-    //si l'id du produit est inconnu
     if(lignes.length == 0) {
       return resultat.sendStatus(404);
     }
 
-    //on vérifie si l'utilisateur connecté est le propriétaire
     const estProprietaire = requete.user.role == "Cupidon" && requete.user.id == lignes[0].id_usager
 
-    //si il n'est ni propriétaire du produit, ni administrateur
     if (!estProprietaire && requete.user.role != "Administrateur") {
       return resultat.sendStatus(403);
     }
 
-    //on supprime le produit
     connection.query("DELETE FROM model WHERE id = ?", [requete.params.id], (erreur, lignes) => {
-      //si il y a eu une erreur
+
       if (erreur) {
         console.error(err);
         return resultat.sendStatus(500); //internal server error
@@ -133,7 +126,7 @@ app.delete("/model/:id", interceptor, (requete, resultat) => {
 app.post("/inscription", (requete, resultat) => {
   const utilisateur = requete.body;
 
-  const passwordHash = bcrypt.hashSync(utilisateur.password, 10);
+  const passwordHash = bcrypt.hashSync(utilisateur.mot_de_passe, 10);
 
   connection.query(
     "INSERT INTO Usagers (nom, courriel, mot_de_passe, id_role) VALUES (? , ?, ?, 3)",
@@ -156,10 +149,10 @@ app.post("/inscription", (requete, resultat) => {
 
 app.post("/connexion", (requete, resultat) => {
   connection.query(
-    `SELECT u.id_usagers, u.courriel, u.mot_de_passe, r.nom_role 
+    `SELECT u.id_usager, u.courriel, u.mot_de_passe, r.nom_role 
       FROM usagers u 
-      JOIN role r ON u.id_usager = r.id_role 
-      WHERE email = ?`,
+      JOIN role r ON u.id_role = r.id_role 
+      WHERE courriel = ?`,
     [requete.body.courriel],
     (erreur, lignes) => {
       if (erreur) {
@@ -174,8 +167,8 @@ app.post("/connexion", (requete, resultat) => {
         return resultat.sendStatus(401);
       }
 
-      const motDePasseFormulaire = requete.body.password;
-      const motDePasseHashBaseDeDonnees = lignes[0].password;
+      const motDePasseFormulaire = requete.body.mot_de_passe;
+      const motDePasseHashBaseDeDonnees = lignes[0].mot_de_passe;
 
       const compatible = bcrypt.compareSync(
         motDePasseFormulaire,
